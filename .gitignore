@@ -3,6 +3,9 @@
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
+
+# Private docs - keep local only
+docs/
 *.hmap
 *.ipa
 *.dSYM.zip
