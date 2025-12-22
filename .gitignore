@@ -6,9 +6,6 @@ DerivedData/
 
 # Private docs - keep local only
 docs/
-
-# Secrets - keep local only
-**/SupabaseService.swift
 *.hmap
 *.ipa
 *.dSYM.zip
