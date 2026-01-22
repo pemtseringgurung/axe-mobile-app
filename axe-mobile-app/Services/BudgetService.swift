@@ -97,21 +97,43 @@ final class BudgetService: ObservableObject {
         let month = calendar.component(.month, from: Date())
         let year = calendar.component(.year, from: Date())
         
-        let input = BudgetInput(
-            userId: userId,
-            categoryId: categoryId,
-            amount: amount,
-            month: month,
-            year: year,
-            rolloverEnabled: rolloverEnabled,
-            rolloverAmount: 0
-        )
-        
         do {
-            try await client
-                .from("budgets")
-                .upsert(input, onConflict: "user_id,category_id,month,year")
-                .execute()
+            // For overall monthly budget (no category), delete existing first
+            // This prevents duplicates since NULL category_id doesn't work with upsert
+            if categoryId == nil {
+                try await client
+                    .from("budgets")
+                    .delete()
+                    .eq("user_id", value: userId.uuidString)
+                    .is("category_id", value: nil)
+                    .eq("month", value: month)
+                    .eq("year", value: year)
+                    .execute()
+            }
+            
+            let input = BudgetInput(
+                userId: userId,
+                categoryId: categoryId,
+                amount: amount,
+                month: month,
+                year: year,
+                rolloverEnabled: rolloverEnabled,
+                rolloverAmount: 0
+            )
+            
+            if categoryId != nil {
+                // Category-specific budgets can use upsert
+                try await client
+                    .from("budgets")
+                    .upsert(input, onConflict: "user_id,category_id,month,year")
+                    .execute()
+            } else {
+                // Overall budget - just insert (we already deleted old one)
+                try await client
+                    .from("budgets")
+                    .insert(input)
+                    .execute()
+            }
             
             await loadBudgets(userId: userId)
             return true
