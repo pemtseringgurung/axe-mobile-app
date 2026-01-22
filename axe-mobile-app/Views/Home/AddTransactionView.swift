@@ -190,10 +190,15 @@ struct AddTransactionView: View {
     
     private func saveTransaction() {
         guard let amountValue = Double(amount) else { return }
+        
+        // Map short names to full category names
+        // TODO: Use BudgetService categories directly
         let fullNames = ["Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills", "Other"]
+        let categoryName = fullNames.indices.contains(selectedCategory) ? fullNames[selectedCategory] : "Other"
+        
         viewModel.addTransaction(
             amount: amountValue,
-            category: fullNames[selectedCategory],
+            categoryName: categoryName, // Changed param name to match ViewModel
             description: description,
             date: date
         )

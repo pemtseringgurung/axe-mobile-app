@@ -47,19 +47,31 @@ struct HomeView: View {
                         // Recent Transactions
                         transactionsSection
                             .padding(.horizontal, 20)
-                        
-                        Spacer(minLength: 110)
                     }
+                    .padding(.bottom, 100) // Space for floating tab bar
                 }
             }
-            
-            // Floating Tab Bar
-            VStack {
-                Spacer()
-                floatingTabBar
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 20)
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 0) {
+                // Gradient fade to hide content behind tab bar
+                LinearGradient(
+                    colors: [bgColor.opacity(0), bgColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 40)
+                
+                // Solid background area for tab bar
+                bgColor
+                    .frame(height: 80)
             }
+            .allowsHitTesting(false) // Let taps pass through to tab bar
+        }
+        .overlay(alignment: .bottom) {
+            floatingTabBar
+                .padding(.horizontal, 32)
+                .padding(.bottom, 20)
         }
         .sheet(isPresented: $showAddTransaction) {
             AddTransactionView(viewModel: viewModel)
@@ -170,12 +182,15 @@ struct HomeView: View {
                             .tracking(2)
                         
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text("$")
-                                .font(.system(size: 28, weight: .medium, design: .rounded))
-                                .foregroundColor(.black)
-                            + Text("\(String(format: "%.2f", viewModel.remaining))")
-                                .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
-                                .foregroundColor(.black)
+                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                Text("$")
+                                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                                    .foregroundColor(.black)
+                                
+                                Text("\(String(format: "%.2f", viewModel.remaining))")
+                                    .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
+                                    .foregroundColor(.black)
+                            }
                             
                             Text("\(Int(100 - viewModel.budgetProgress * 100))%")
                                 .font(.system(size: 14, weight: .heavy, design: .rounded))

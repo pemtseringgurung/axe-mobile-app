@@ -2,18 +2,18 @@
 //  HomeViewModel.swift
 //  axe-mobile-app
 //
-//  ViewModel for home dashboard - manages budget data
+//  ViewModel for home dashboard - manages budget and transaction data
 //
 
 import Foundation
 import SwiftUI
 import Combine
 
-// MARK: - Data Models
+// MARK: - Display Models
 struct CategoryBudgetItem: Identifiable {
-    let id = UUID()
+    let id: UUID
     let name: String
-    let icon: String
+    let icon: String // SF Symbol name
     let color: Color
     var budget: Double
     var spent: Double
@@ -29,14 +29,6 @@ struct TransactionDisplayItem: Identifiable {
     let date: Date
 }
 
-struct SavedTransaction: Codable, Identifiable {
-    let id: UUID
-    let amount: Double
-    let category: String
-    let description: String
-    let date: Date
-}
-
 // MARK: - ViewModel
 class HomeViewModel: ObservableObject {
     @Published var totalBudget: Double = 0
@@ -46,7 +38,11 @@ class HomeViewModel: ObservableObject {
     @Published var isLoading = false
     
     private var userId: UUID?
-    private var rawTransactions: [SavedTransaction] = []
+    private var rawTransactions: [Transaction] = []
+    
+    // Services
+    private let transactionService = TransactionService.shared
+    private let budgetService = BudgetService.shared
     
     // MARK: - Computed Properties
     var hasBudget: Bool { totalBudget > 0 }
@@ -121,79 +117,102 @@ class HomeViewModel: ObservableObject {
     func loadData(userId: UUID) {
         self.userId = userId
         
-        // Load budget
-        if let saved = UserDefaults.standard.value(forKey: "budget_\(userId)") as? Double {
-            self.totalBudget = saved
-        }
+        // Load transactions from local storage immediately (for fast UI)
+        loadTransactionsLocally()
         
-        // Load transactions
-        loadTransactions()
+        // Setup dashboard with local data first
+        setupDashboard()
         
-        // Setup default categories if budget exists
-        if hasBudget {
-            setupCategories()
-        }
-    }
-    
-    private func loadTransactions() {
-        guard let userId = userId else { return }
-        
-        if let data = UserDefaults.standard.data(forKey: "transactions_\(userId)"),
-           let decoded = try? JSONDecoder().decode([SavedTransaction].self, from: data) {
+        // Then load from Supabase
+        Task {
+            await MainActor.run { self.isLoading = true }
             
-            self.rawTransactions = decoded.sorted { $0.date > $1.date }
+            // Load Categories from Supabase
+            await budgetService.loadCategories()
             
-            self.transactions = rawTransactions.map { tx in
-                TransactionDisplayItem(
-                    id: tx.id,
-                    title: tx.description.isEmpty ? tx.category : tx.description,
-                    amount: tx.amount,
-                    categoryIcon: iconFor(tx.category),
-                    categoryColor: colorFor(tx.category),
-                    dateString: formatDate(tx.date),
-                    date: tx.date
-                )
-            }
+            // Load Budgets from Supabase
+            await budgetService.loadBudgets(userId: userId)
             
-            // Calculate total spent this month
-            let calendar = Calendar.current
-            let now = Date()
-            let currentMonth = calendar.component(.month, from: now)
-            let currentYear = calendar.component(.year, from: now)
+            // Load Transactions from Supabase
+            let cloudTxs = await transactionService.fetchTransactions(userId: userId)
             
-            self.totalSpent = rawTransactions
-                .filter {
-                    calendar.component(.month, from: $0.date) == currentMonth &&
-                    calendar.component(.year, from: $0.date) == currentYear
+            await MainActor.run {
+                // Use cloud budget
+                self.totalBudget = budgetService.totalBudget
+                
+                // Use cloud transactions
+                if !cloudTxs.isEmpty {
+                    self.rawTransactions = cloudTxs
+                    self.processTransactions()
                 }
-                .reduce(0) { $0 + $1.amount }
+                
+                self.setupDashboard()
+                self.isLoading = false
+            }
         }
     }
     
-    private func setupCategories() {
-        // Calculate spending per category
-        var categorySpending: [String: Double] = [:]
-        for tx in rawTransactions {
-            categorySpending[tx.category, default: 0] += tx.amount
+    private func processTransactions() {
+        // Map raw transactions to display items
+        self.transactions = rawTransactions.map { tx in
+            let category = budgetService.categories.first { $0.id == tx.categoryId }
+            let catName = category?.name ?? "Transaction"
+            
+            // Use description if it exists and is not empty, otherwise use category name
+            let displayTitle = (tx.description?.isEmpty == false) ? tx.description! : catName
+            
+            return TransactionDisplayItem(
+                id: tx.id,
+                title: displayTitle,
+                amount: tx.amount,
+                categoryIcon: category?.icon ?? "square.grid.2x2.fill",
+                categoryColor: Color(hex: category?.color ?? "#808080"),
+                dateString: formatDate(tx.date),
+                date: tx.date
+            )
         }
         
-        // Default category distribution
-        let categoryData: [(String, String, Color, Double)] = [
-            ("Food & Dining", "cup.and.saucer.fill", Color(red: 255/255, green: 107/255, blue: 107/255), 0.30),
-            ("Transportation", "tram.fill", Color(red: 78/255, green: 205/255, blue: 196/255), 0.15),
-            ("Shopping", "handbag.fill", Color(red: 69/255, green: 183/255, blue: 209/255), 0.20),
-            ("Entertainment", "gamecontroller.fill", Color(red: 150/255, green: 206/255, blue: 180/255), 0.15),
-            ("Bills", "creditcard.fill", Color(red: 255/255, green: 234/255, blue: 167/255), 0.10),
-            ("Other", "square.grid.2x2.fill", Color.gray, 0.10)
-        ]
+        // Calculate total spent this month
+        let calendar = Calendar.current
+        let now = Date()
+        let currentMonth = calendar.component(.month, from: now)
+        let currentYear = calendar.component(.year, from: now)
         
-        self.categories = categoryData.map { (name, icon, color, percent) in
-            CategoryBudgetItem(
-                name: name,
-                icon: icon,
-                color: color,
-                budget: totalBudget * percent,
-                spent: categorySpending[name] ?? 0
+        self.totalSpent = rawTransactions
+            .filter {
+                calendar.component(.month, from: $0.date) == currentMonth &&
+                calendar.component(.year, from: $0.date) == currentYear
+            }
+            .reduce(0) { $0 + $1.amount }
+    }
+    
+    private func setupDashboard() {
+        // Calculate spending per category ID
+        var categorySpending: [UUID: Double] = [:]
+        for tx in rawTransactions {
+            if let catId = tx.categoryId {
+                categorySpending[catId, default: 0] += tx.amount
+            }
+        }
+        
+        // Always use actual categories for the bubble display
+        // Don't use budget rows (which may have NULL category_id for overall budget)
+        let allCategories = budgetService.categories.isEmpty ? Category.defaults : budgetService.categories
+        
+        // Get category-specific budgets (filter out overall budgets with nil category)
+        let categoryBudgets = budgetService.budgets.filter { $0.category != nil }
+        
+        self.categories = allCategories.map { cat in
+            // Find if there's a specific budget for this category
+            let catBudget = categoryBudgets.first { $0.category?.id == cat.id }
+            
+            return CategoryBudgetItem(
+                id: cat.id,
+                name: cat.name,
+                icon: cat.icon,
+                color: Color(hex: cat.color),
+                budget: catBudget?.budget.amount ?? 0,
+                spent: categorySpending[cat.id] ?? 0
             )
         }
     }
@@ -202,54 +221,120 @@ class HomeViewModel: ObservableObject {
     func setBudget(amount: Double) {
         guard let userId = userId else { return }
         self.totalBudget = amount
-        UserDefaults.standard.set(amount, forKey: "budget_\(userId)")
-        setupCategories()
+        setupDashboard()
+        
+        // Save to Supabase in background
+        Task {
+            let success = await budgetService.saveBudget(
+                userId: userId,
+                categoryId: nil,  // nil = total budget
+                amount: amount,
+                rolloverEnabled: false
+            )
+            if success {
+                print("✅ Budget saved to Supabase")
+            } else {
+                print("❌ Failed to save budget to Supabase")
+            }
+        }
     }
     
-    func addTransaction(amount: Double, category: String, description: String, date: Date) {
+    func addTransaction(amount: Double, categoryName: String, description: String, date: Date) {
         guard let userId = userId else { return }
         
-        let tx = SavedTransaction(
+        // Find category for display
+        let category = budgetService.categories.first { $0.name == categoryName }
+        
+        // Create display item immediately
+        let newTx = TransactionDisplayItem(
             id: UUID(),
+            title: description.isEmpty ? categoryName : description,
             amount: amount,
-            category: category,
-            description: description,
+            categoryIcon: category?.icon ?? "square.grid.2x2.fill",
+            categoryColor: Color(hex: category?.color ?? "#808080"),
+            dateString: "Today",
             date: date
         )
         
-        rawTransactions.insert(tx, at: 0)
+        // Update UI immediately
+        transactions.insert(newTx, at: 0)
+        totalSpent += amount
+        setupDashboard()
         
-        if let encoded = try? JSONEncoder().encode(rawTransactions) {
-            UserDefaults.standard.set(encoded, forKey: "transactions_\(userId)")
+        // Save to local storage
+        saveTransactionsLocally()
+        
+        // Try to save to Supabase in background (don't block on it)
+        Task {
+            _ = await transactionService.addTransaction(
+                userId: userId,
+                amount: amount,
+                categoryId: category?.id,
+                description: description,
+                date: date
+            )
+        }
+    }
+    
+    // MARK: - Local Storage
+    private func saveTransactionsLocally() {
+        guard let userId = userId else { return }
+        
+        // Save transaction display items to UserDefaults
+        let txData = transactions.map { tx in
+            ["id": tx.id.uuidString,
+             "title": tx.title,
+             "amount": tx.amount,
+             "icon": tx.categoryIcon,
+             "color": "#808080",
+             "dateString": tx.dateString,
+             "date": tx.date.timeIntervalSince1970] as [String: Any]
         }
         
-        loadTransactions()
-        setupCategories()
+        UserDefaults.standard.set(txData, forKey: "transactions_\(userId)")
+    }
+    
+    private func loadTransactionsLocally() {
+        guard let userId = userId else { return }
+        
+        if let txData = UserDefaults.standard.array(forKey: "transactions_\(userId)") as? [[String: Any]] {
+            self.transactions = txData.compactMap { dict in
+                guard let idStr = dict["id"] as? String,
+                      let id = UUID(uuidString: idStr),
+                      let title = dict["title"] as? String,
+                      let amount = dict["amount"] as? Double,
+                      let icon = dict["icon"] as? String,
+                      let dateString = dict["dateString"] as? String,
+                      let dateInterval = dict["date"] as? TimeInterval else {
+                    return nil
+                }
+                return TransactionDisplayItem(
+                    id: id,
+                    title: title,
+                    amount: amount,
+                    categoryIcon: icon,
+                    categoryColor: .gray,
+                    dateString: dateString,
+                    date: Date(timeIntervalSince1970: dateInterval)
+                )
+            }
+            
+            // Recalculate total spent this month
+            let calendar = Calendar.current
+            let now = Date()
+            let currentMonth = calendar.component(.month, from: now)
+            let currentYear = calendar.component(.year, from: now)
+            
+            self.totalSpent = transactions
+                .filter {
+                    calendar.component(.month, from: $0.date) == currentMonth &&
+                    calendar.component(.year, from: $0.date) == currentYear
+                }
+                .reduce(0) { $0 + $1.amount }
+        }
     }
     
     // MARK: - Helpers
-    private func iconFor(_ category: String) -> String {
-        switch category {
-        case "Food & Dining": return "cup.and.saucer.fill"
-        case "Transportation": return "tram.fill"
-        case "Shopping": return "handbag.fill"
-        case "Entertainment": return "gamecontroller.fill"
-        case "Bills": return "creditcard.fill"
-        default: return "square.grid.2x2.fill"
-        }
-    }
-    
-    private func colorFor(_ category: String) -> Color {
-        switch category {
-        case "Food & Dining": return Color(red: 255/255, green: 107/255, blue: 107/255)
-        case "Transportation": return Color(red: 78/255, green: 205/255, blue: 196/255)
-        case "Shopping": return Color(red: 69/255, green: 183/255, blue: 209/255)
-        case "Entertainment": return Color(red: 150/255, green: 206/255, blue: 180/255)
-        case "Bills": return Color(red: 255/255, green: 234/255, blue: 167/255)
-        default: return .gray
-        }
-    }
-    
     private func formatDate(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
@@ -261,5 +346,33 @@ class HomeViewModel: ObservableObject {
             formatter.dateFormat = "MMM d"
             return formatter.string(from: date)
         }
+    }
+}
+
+// MARK: - Color Hex Extension
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
     }
 }

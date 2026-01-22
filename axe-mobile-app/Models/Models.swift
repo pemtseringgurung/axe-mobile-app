@@ -82,6 +82,46 @@ struct Transaction: Codable, Identifiable {
         case amount, description, date
         case createdAt = "created_at"
     }
+    
+    // Custom decoder to handle Supabase "YYYY-MM-DD" date format
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(UUID.self, forKey: .id)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        categoryId = try container.decodeIfPresent(UUID.self, forKey: .categoryId)
+        amount = try container.decode(Double.self, forKey: .amount)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        
+        // Handle date - try as Date first, then as String
+        if let dateValue = try? container.decode(Date.self, forKey: .date) {
+            date = dateValue
+        } else if let dateString = try? container.decode(String.self, forKey: .date) {
+            // Parse "YYYY-MM-DD" format
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let parsedDate = formatter.date(from: dateString) {
+                date = parsedDate
+            } else {
+                throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Cannot parse date: \(dateString)")
+            }
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Date is missing")
+        }
+    }
+    
+    // Standard initializer for creating transactions in code
+    init(id: UUID, userId: UUID, categoryId: UUID?, amount: Double, description: String?, date: Date, createdAt: Date?) {
+        self.id = id
+        self.userId = userId
+        self.categoryId = categoryId
+        self.amount = amount
+        self.description = description
+        self.date = date
+        self.createdAt = createdAt
+    }
 }
 
 // MARK: - Budget with Category (for display)
