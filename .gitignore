@@ -1,0 +1,63 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# Private docs - keep local only
+docs/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscheme
+!*.xcscheme
+
+# Build
+build/
+Build/
+*.o
+*.a
+*.dSYM
+
+# CocoaPods
+Pods/
+Podfile.lock
+!Podfile
+
+# Swift Package Manager
+.build/
+Package.resolved
+
+# Carthage
+Carthage/Build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE
+*.swp
+*.swo
+*~
+.idea/
+*.sublime-*
+
+# Secrets - IMPORTANT!
+Secrets.swift
+**/Secrets.swift
+.env
+.env.*
+*.xcconfig
+!*.xcconfig.template
+
+# User data
+*.log
+*.tmp
