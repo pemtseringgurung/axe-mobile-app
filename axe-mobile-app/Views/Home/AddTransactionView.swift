@@ -2,7 +2,7 @@
 //  AddTransactionView.swift
 //  axe-mobile-app
 //
-//  Minimal modern transaction entry
+//  Minimal modern transaction entry - uses categories from Supabase
 //
 
 import SwiftUI
@@ -13,21 +13,17 @@ struct AddTransactionView: View {
     
     @State private var amount = ""
     @State private var description = ""
-    @State private var selectedCategory = 0
+    @State private var selectedCategoryId: UUID?
     @State private var date = Date()
     
     // Minimal colors
     private let bgColor = Color(red: 14/255, green: 14/255, blue: 18/255)
     private let accent = Color(red: 185/255, green: 255/255, blue: 100/255)
     
-    private let categories = [
-        ("Food", "cup.and.saucer"),
-        ("Transport", "tram"),
-        ("Shopping", "handbag"),
-        ("Fun", "gamecontroller"),
-        ("Bills", "creditcard"),
-        ("Other", "square.grid.2x2")
-    ]
+    // Get categories from viewModel (loaded from Supabase)
+    private var categories: [CategoryBudgetItem] {
+        viewModel.categories
+    }
     
     var body: some View {
         NavigationStack {
@@ -40,17 +36,17 @@ struct AddTransactionView: View {
                             // Amount - minimal
                             VStack(spacing: 16) {
                                 Text("AMOUNT")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.spaceGroteskMedium(11))
                                     .foregroundColor(.gray)
                                     .tracking(2)
                                 
                                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                                     Text("$")
-                                        .font(.system(size: 36, weight: .light, design: .rounded))
+                                        .font(.spaceGroteskLight(36))
                                         .foregroundColor(.white.opacity(0.5))
                                     
                                     TextField("0", text: $amount)
-                                        .font(.system(size: 56, weight: .semibold, design: .rounded).monospacedDigit())
+                                        .font(.spaceGroteskBold(56))
                                         .foregroundColor(.white)
                                         .keyboardType(.decimalPad)
                                         .multilineTextAlignment(.center)
@@ -59,35 +55,39 @@ struct AddTransactionView: View {
                             }
                             .padding(.top, 32)
                             
-                            // Category - outline style
+                            // Category - outline style, loaded from Supabase
                             VStack(alignment: .leading, spacing: 16) {
                                 Text("CATEGORY")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.spaceGroteskMedium(11))
                                     .foregroundColor(.gray)
                                     .tracking(2)
                                     .padding(.horizontal, 24)
                                 
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 20) {
-                                        ForEach(0..<categories.count, id: \.self) { index in
+                                    HStack(spacing: 16) {
+                                        ForEach(categories) { category in
+                                            let isSelected = selectedCategoryId == category.id
+                                            
                                             VStack(spacing: 10) {
                                                 ZStack {
                                                     Circle()
-                                                        .stroke(selectedCategory == index ? accent : Color.white.opacity(0.2), lineWidth: 1.5)
+                                                        .stroke(isSelected ? accent : Color.white.opacity(0.2), lineWidth: 1.5)
                                                         .frame(width: 52, height: 52)
                                                     
-                                                    Image(systemName: categories[index].1)
+                                                    Image(systemName: category.icon.replacingOccurrences(of: ".fill", with: ""))
                                                         .font(.system(size: 20, weight: .light))
-                                                        .foregroundColor(selectedCategory == index ? accent : .white.opacity(0.6))
+                                                        .foregroundColor(isSelected ? accent : .white.opacity(0.6))
                                                 }
                                                 
-                                                Text(categories[index].0)
-                                                    .font(.system(size: 11, weight: .medium))
-                                                    .foregroundColor(selectedCategory == index ? .white : .gray)
+                                                Text(shortName(for: category.name))
+                                                    .font(.spaceGroteskMedium(11))
+                                                    .foregroundColor(isSelected ? .white : .gray)
+                                                    .lineLimit(1)
                                             }
+                                            .frame(width: 60)
                                             .onTapGesture { 
                                                 withAnimation(.easeOut(duration: 0.15)) {
-                                                    selectedCategory = index 
+                                                    selectedCategoryId = category.id
                                                 }
                                             }
                                         }
@@ -100,57 +100,42 @@ struct AddTransactionView: View {
                             // Note - minimal underline style
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("NOTE")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.spaceGroteskMedium(11))
                                     .foregroundColor(.gray)
                                     .tracking(2)
                                 
-                                VStack(spacing: 0) {
-                                    ZStack(alignment: .leading) {
-                                        if description.isEmpty {
-                                            Text("What was this for?")
-                                                .font(.system(size: 16))
-                                                .foregroundColor(.white.opacity(0.3))
-                                        }
-                                        
-                                        TextField("", text: $description)
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.white)
-                                    }
+                                TextField("What was this for?", text: $description)
+                                    .font(.spaceGroteskMedium(16))
+                                    .foregroundColor(.white)
                                     .padding(.vertical, 12)
-                                    
-                                    Rectangle()
-                                        .fill(Color.white.opacity(0.15))
-                                        .frame(height: 1)
-                                }
+                                    .overlay(
+                                        Rectangle()
+                                            .frame(height: 1)
+                                            .foregroundColor(.white.opacity(0.1)),
+                                        alignment: .bottom
+                                    )
                             }
                             .padding(.horizontal, 24)
                             
-                            // Date - modern capsule style
+                            // Date
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("DATE")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.spaceGroteskMedium(11))
                                     .foregroundColor(.gray)
                                     .tracking(2)
                                 
-                                HStack {
-                                    DatePicker("", selection: $date, displayedComponents: .date)
-                                        .datePickerStyle(.compact)
-                                        .labelsHidden()
-                                        .colorScheme(.dark)
-                                        .tint(accent)
-                                    
-                                    Spacer()
-                                    
-                                    Image(systemName: "calendar")
-                                        .font(.system(size: 16, weight: .light))
-                                        .foregroundColor(.white.opacity(0.4))
-                                }
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 16)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                )
+                                DatePicker("", selection: $date, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                                    .colorScheme(.dark)
+                                    .accentColor(accent)
+                                    .padding(12)
+                                    .background(Color.white.opacity(0.05))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    )
                             }
                             .padding(.horizontal, 24)
                         }
@@ -159,14 +144,14 @@ struct AddTransactionView: View {
                     // Save Button
                     Button(action: saveTransaction) {
                         Text("Add Transaction")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .font(.spaceGroteskBold(16))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            .background(amount.isEmpty ? Color.white.opacity(0.2) : accent)
+                            .background(canSave ? accent : Color.white.opacity(0.2))
                             .cornerRadius(14)
                     }
-                    .disabled(amount.isEmpty)
+                    .disabled(!canSave)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
                 }
@@ -185,20 +170,41 @@ struct AddTransactionView: View {
                     }
                 }
             }
+            .onAppear {
+                // Auto-select first category if available
+                if selectedCategoryId == nil, let first = categories.first {
+                    selectedCategoryId = first.id
+                }
+            }
+        }
+    }
+    
+    private var canSave: Bool {
+        !amount.isEmpty && selectedCategoryId != nil
+    }
+    
+    // Shorten long category names for display
+    private func shortName(for name: String) -> String {
+        switch name {
+        case "Food & Dining": return "Food"
+        case "Transportation": return "Transport"
+        case "Entertainment": return "Fun"
+        case "Bills & Utilities": return "Bills"
+        case "Health & Fitness": return "Health"
+        case "Personal Care": return "Personal"
+        case "Subscriptions": return "Subs"
+        default: return name
         }
     }
     
     private func saveTransaction() {
-        guard let amountValue = Double(amount) else { return }
-        
-        // Map short names to full category names
-        // TODO: Use BudgetService categories directly
-        let fullNames = ["Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills", "Other"]
-        let categoryName = fullNames.indices.contains(selectedCategory) ? fullNames[selectedCategory] : "Other"
+        guard let amountValue = Double(amount),
+              let categoryId = selectedCategoryId,
+              let category = categories.first(where: { $0.id == categoryId }) else { return }
         
         viewModel.addTransaction(
             amount: amountValue,
-            categoryName: categoryName, // Changed param name to match ViewModel
+            categoryName: category.name,
             description: description,
             date: date
         )

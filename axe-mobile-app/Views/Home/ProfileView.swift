@@ -35,17 +35,17 @@ struct ProfileView: View {
                             .frame(width: 80, height: 80)
                             .overlay(
                                 Text(String(firstName.prefix(1)).uppercased())
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .font(.spaceGroteskBold(28))
                                     .foregroundColor(.white)
                             )
                         
                         VStack(spacing: 4) {
                             Text(firstName)
-                                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                .font(.spaceGroteskBold(22))
                                 .foregroundColor(.white)
                             
                             Text(authService.userEmail ?? "")
-                                .font(.system(size: 14))
+                                .font(.spaceGrotesk(14))
                                 .foregroundColor(.gray)
                         }
                     }
@@ -86,7 +86,7 @@ struct ProfileView: View {
                                 .font(.system(size: 16, weight: .light))
                             
                             Text("Log Out")
-                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                .font(.spaceGroteskMedium(16))
                         }
                         .foregroundColor(.red.opacity(0.8))
                         .frame(maxWidth: .infinity)
@@ -150,7 +150,7 @@ struct MenuItem: View {
                     )
                 
                 Text(title)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(.spaceGroteskMedium(16))
                     .foregroundColor(.white)
                 
                 Spacer()

@@ -17,6 +17,7 @@ struct CategoryBudgetItem: Identifiable {
     let color: Color
     var budget: Double
     var spent: Double
+    var isDefault: Bool = true // Default categories can't be deleted
 }
 
 struct TransactionDisplayItem: Identifiable {
@@ -212,7 +213,8 @@ class HomeViewModel: ObservableObject {
                 icon: cat.icon,
                 color: Color(hex: cat.color),
                 budget: catBudget?.budget.amount ?? 0,
-                spent: categorySpending[cat.id] ?? 0
+                spent: categorySpending[cat.id] ?? 0,
+                isDefault: cat.isDefault ?? true
             )
         }
     }
@@ -239,15 +241,92 @@ class HomeViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Category Budget Allocation
+    var allocatedBudget: Double {
+        categories.reduce(0) { $0 + $1.budget }
+    }
+    
+    var unallocatedBudget: Double {
+        max(0, totalBudget - allocatedBudget)
+    }
+    
+    func setCategoryBudget(categoryId: UUID, amount: Double) {
+        guard let userId = userId else { return }
+        
+        // Update local state immediately
+        if let index = categories.firstIndex(where: { $0.id == categoryId }) {
+            categories[index].budget = amount
+        }
+        
+        // Save to Supabase in background
+        Task {
+            let success = await budgetService.saveBudget(
+                userId: userId,
+                categoryId: categoryId,
+                amount: amount,
+                rolloverEnabled: false
+            )
+            if success {
+                print("✅ Category budget saved to Supabase")
+            } else {
+                print("❌ Failed to save category budget to Supabase")
+            }
+        }
+    }
+    
+    // MARK: - Custom Category Management
+    func addCategory(name: String, icon: String) {
+        let newCategoryId = UUID()
+        
+        // Add to local state immediately
+        let newCategory = CategoryBudgetItem(
+            id: newCategoryId,
+            name: name,
+            icon: icon,
+            color: Color(red: 185/255, green: 255/255, blue: 100/255), // Use accent color
+            budget: 0,
+            spent: 0,
+            isDefault: false // Custom category can be deleted
+        )
+        categories.append(newCategory)
+        
+        // Save to Supabase in background
+        Task {
+            let success = await budgetService.addCategory(name: name, icon: icon)
+            if success {
+                print("✅ Custom category saved to Supabase")
+            } else {
+                print("❌ Failed to save custom category to Supabase")
+            }
+        }
+    }
+    
+    func deleteCategory(categoryId: UUID) {
+        // Remove from local state immediately
+        categories.removeAll { $0.id == categoryId }
+        
+        // Delete from Supabase in background
+        Task {
+            let success = await budgetService.deleteCategory(categoryId: categoryId)
+            if success {
+                print("✅ Category deleted from Supabase")
+            } else {
+                print("❌ Failed to delete category from Supabase")
+            }
+        }
+    }
+    
     func addTransaction(amount: Double, categoryName: String, description: String, date: Date) {
         guard let userId = userId else { return }
         
         // Find category for display
         let category = budgetService.categories.first { $0.name == categoryName }
         
+        let txId = UUID()
+        
         // Create display item immediately
         let newTx = TransactionDisplayItem(
-            id: UUID(),
+            id: txId,
             title: description.isEmpty ? categoryName : description,
             amount: amount,
             categoryIcon: category?.icon ?? "square.grid.2x2.fill",
@@ -256,10 +335,22 @@ class HomeViewModel: ObservableObject {
             date: date
         )
         
+        // Also add to rawTransactions so category spending updates correctly
+        let rawTx = Transaction(
+            id: txId,
+            userId: userId,
+            categoryId: category?.id,
+            amount: amount,
+            description: description.isEmpty ? nil : description,
+            date: date,
+            createdAt: Date()
+        )
+        rawTransactions.insert(rawTx, at: 0)
+        
         // Update UI immediately
         transactions.insert(newTx, at: 0)
         totalSpent += amount
-        setupDashboard()
+        setupDashboard() // This now sees the new transaction in rawTransactions
         
         // Save to local storage
         saveTransactionsLocally()
@@ -272,6 +363,75 @@ class HomeViewModel: ObservableObject {
                 categoryId: category?.id,
                 description: description,
                 date: date
+            )
+        }
+    }
+    
+    // MARK: - Delete Transaction
+    func deleteTransaction(id: UUID) {
+        // Remove from local array immediately
+        transactions.removeAll { $0.id == id }
+        
+        // Recalculate spent
+        let calendar = Calendar.current
+        let now = Date()
+        let currentMonth = calendar.component(.month, from: now)
+        let currentYear = calendar.component(.year, from: now)
+        
+        self.totalSpent = transactions
+            .filter {
+                calendar.component(.month, from: $0.date) == currentMonth &&
+                calendar.component(.year, from: $0.date) == currentYear
+            }
+            .reduce(0) { $0 + $1.amount }
+        
+        // Update local storage
+        saveTransactionsLocally()
+        
+        // Delete from Supabase
+        Task {
+            _ = await transactionService.deleteTransaction(id: id)
+        }
+    }
+    
+    // MARK: - Update Transaction
+    func updateTransaction(id: UUID, amount: Double, description: String) {
+        // Update local array immediately
+        if let index = transactions.firstIndex(where: { $0.id == id }) {
+            let old = transactions[index]
+            transactions[index] = TransactionDisplayItem(
+                id: id,
+                title: description.isEmpty ? old.title : description,
+                amount: amount,
+                categoryIcon: old.categoryIcon,
+                categoryColor: old.categoryColor,
+                dateString: old.dateString,
+                date: old.date
+            )
+        }
+        
+        // Recalculate spent
+        let calendar = Calendar.current
+        let now = Date()
+        let currentMonth = calendar.component(.month, from: now)
+        let currentYear = calendar.component(.year, from: now)
+        
+        self.totalSpent = transactions
+            .filter {
+                calendar.component(.month, from: $0.date) == currentMonth &&
+                calendar.component(.year, from: $0.date) == currentYear
+            }
+            .reduce(0) { $0 + $1.amount }
+        
+        // Update local storage
+        saveTransactionsLocally()
+        
+        // Update in Supabase
+        Task {
+            _ = await transactionService.updateTransaction(
+                id: id,
+                amount: amount,
+                description: description.isEmpty ? nil : description
             )
         }
     }
