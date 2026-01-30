@@ -5,7 +5,6 @@
 DerivedData/
 
 # Private docs - keep local only
-docs/
 *.hmap
 *.ipa
 *.dSYM.zip

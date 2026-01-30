@@ -14,6 +14,12 @@ struct HomeView: View {
     @State private var showAddTransaction = false
     @State private var showBudgetSetup = false
     @State private var showProfile = false
+    @State private var showTransactionDetail = false
+    @State private var showAllTransactions = false
+    @State private var showCategoryBudget = false
+    @State private var showAnalytics = false
+    @State private var showAICoach = false
+    @State private var selectedTransaction: TransactionDisplayItem?
     @State private var selectedTab = 0
     
     // Colors
@@ -82,6 +88,21 @@ struct HomeView: View {
         .sheet(isPresented: $showProfile) {
             ProfileView()
         }
+        .sheet(item: $selectedTransaction) { transaction in
+            TransactionDetailView(transaction: transaction, viewModel: viewModel)
+        }
+        .sheet(isPresented: $showAllTransactions) {
+            AllTransactionsView(viewModel: viewModel, selectedTransaction: $selectedTransaction)
+        }
+        .sheet(isPresented: $showCategoryBudget) {
+            CategoryBudgetView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showAnalytics) {
+            AnalyticsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showAICoach) {
+            AICoachView(viewModel: viewModel)
+        }
         .onAppear {
             if let userId = authService.userId {
                 viewModel.loadData(userId: userId)
@@ -99,7 +120,7 @@ struct HomeView: View {
                     .foregroundColor(cardColor)
                 
                 Text("axe")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(.spaceGroteskBold(26))
                     .tracking(-0.5)
                     .foregroundColor(.white)
             }
@@ -184,11 +205,11 @@ struct HomeView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             HStack(alignment: .firstTextBaseline, spacing: 2) {
                                 Text("$")
-                                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                                    .font(.spaceGroteskMedium(28))
                                     .foregroundColor(.black)
                                 
                                 Text("\(String(format: "%.2f", viewModel.remaining))")
-                                    .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
+                                    .font(.spaceGroteskBold(44))
                                     .foregroundColor(.black)
                             }
                             
@@ -202,21 +223,18 @@ struct HomeView: View {
                         }
                     }
                     
-                    // Action buttons - clean white circles
-                    HStack(spacing: 10) {
-                        ActionCircle(icon: "plus", action: { showAddTransaction = true })
-                        ActionCircle(icon: "arrow.down", action: {})
-                        ActionCircle(icon: "chart.bar.fill", action: {})
-                        
+                    // Clean bottom corner - no cluttered action buttons
+                    HStack {
                         Spacer()
                         
-                        Button(action: {}) {
+                        // Just a subtle grid button for category overview
+                        Button(action: { showCategoryBudget = true }) {
                             Image(systemName: "square.grid.2x2")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.black)
-                                .frame(width: 48, height: 48)
-                                .background(Color.white)
-                                .cornerRadius(14)
+                                .foregroundColor(.black.opacity(0.6))
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.5))
+                                .cornerRadius(12)
                         }
                     }
                     
@@ -256,14 +274,16 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Categories")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.spaceGroteskBold(17))
                     .foregroundColor(.white)
                 
                 Spacer()
                 
-                Text("See all")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundColor(.gray)
+                Button(action: { showCategoryBudget = true }) {
+                    Text("Manage")
+                        .font(.spaceGroteskMedium(13))
+                        .foregroundColor(.gray)
+                }
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -272,6 +292,7 @@ struct HomeView: View {
                         CategoryBubble(category: category, accent: cardColor)
                     }
                 }
+                .padding(.vertical, 2) // Prevents clipping of circle rings
             }
         }
     }
@@ -281,14 +302,16 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Recent Transactions")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.spaceGroteskBold(17))
                     .foregroundColor(.white)
                 
                 Spacer()
                 
-                Text("See all")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundColor(.gray)
+                Button(action: { showAllTransactions = true }) {
+                    Text("See all")
+                        .font(.spaceGroteskMedium(13))
+                        .foregroundColor(.gray)
+                }
             }
             
             if viewModel.transactions.isEmpty {
@@ -316,10 +339,14 @@ struct HomeView: View {
                 .padding(.vertical, 40)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(viewModel.transactions.prefix(5)) { tx in
+                    ForEach(viewModel.transactions.prefix(2)) { tx in
                         TransactionRow(transaction: tx, accent: cardColor)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedTransaction = tx
+                            }
                         
-                        if tx.id != viewModel.transactions.prefix(5).last?.id {
+                        if tx.id != viewModel.transactions.prefix(2).last?.id {
                             Rectangle()
                                 .fill(Color.white.opacity(0.08))
                                 .frame(height: 1)
@@ -334,27 +361,48 @@ struct HomeView: View {
     // MARK: - Tab Bar
     private var floatingTabBar: some View {
         HStack(spacing: 0) {
-            TabIcon(icon: "chart.bar.fill", isSelected: selectedTab == 0) { selectedTab = 0 }
-            TabIcon(icon: "creditcard.fill", isSelected: selectedTab == 1) { selectedTab = 1 }
+            // Home
+            TabIcon(icon: "house", isSelected: selectedTab == 0) { selectedTab = 0 }
             
-            // Center FAB
+            // AI Coach - the core feature!
+            Button(action: { showAICoach = true }) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 18))
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+            }
+            
+            // Center FAB - Add Transaction
             Button(action: { showAddTransaction = true }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.black)
-                    .frame(width: 54, height: 54)
+                    .frame(width: 50, height: 50)
                     .background(cardColor)
                     .clipShape(Circle())
             }
-            .offset(y: -10)
+            .offset(y: -8)
             
-            TabIcon(icon: "link", isSelected: selectedTab == 2) { selectedTab = 2 }
-            TabIcon(icon: "person.fill", isSelected: selectedTab == 3) { selectedTab = 3 }
+            // Analytics
+            Button(action: { showAnalytics = true }) {
+                Image(systemName: "chart.pie")
+                    .font(.system(size: 18))
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+            }
+            
+            // Profile
+            Button(action: { showProfile = true }) {
+                Image(systemName: "person")
+                    .font(.system(size: 18))
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
         .background(cardDark)
-        .cornerRadius(30)
+        .cornerRadius(28)
     }
 }
 
@@ -421,7 +469,7 @@ struct CategoryBubble: View {
             }
             
             Text(shortName(category.name))
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.spaceGroteskMedium(11))
                 .foregroundColor(.gray)
                 .lineLimit(1)
         }
@@ -453,18 +501,18 @@ struct TransactionRow: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(transaction.title)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.spaceGroteskMedium(15))
                     .foregroundColor(.white)
                 
                 Text(transaction.dateString)
-                    .font(.system(size: 12))
+                    .font(.spaceGrotesk(12))
                     .foregroundColor(.gray)
             }
             
             Spacer()
             
             Text("-$\(String(format: "%.2f", transaction.amount))")
-                .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.spaceGroteskBold(15))
                 .foregroundColor(.white)
         }
         .padding(.vertical, 14)

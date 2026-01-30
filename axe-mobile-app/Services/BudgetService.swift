@@ -170,4 +170,62 @@ final class BudgetService: ObservableObject {
     var totalRemaining: Double {
         totalBudget - totalSpent
     }
+    
+    // MARK: - Add Custom Category
+    func addCategory(name: String, icon: String) async -> Bool {
+        struct CategoryInput: Codable {
+            let name: String
+            let icon: String
+            let color: String
+            let isDefault: Bool
+            
+            enum CodingKeys: String, CodingKey {
+                case name, icon, color
+                case isDefault = "is_default"
+            }
+        }
+        
+        let input = CategoryInput(
+            name: name,
+            icon: icon,
+            color: "#B9FF64", // Lime green accent
+            isDefault: false
+        )
+        
+        do {
+            try await client
+                .from("categories")
+                .insert(input)
+                .execute()
+            
+            await loadCategories()
+            return true
+        } catch {
+            print("Failed to add category: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to add category"
+            }
+            return false
+        }
+    }
+    
+    // MARK: - Delete Custom Category
+    func deleteCategory(categoryId: UUID) async -> Bool {
+        do {
+            try await client
+                .from("categories")
+                .delete()
+                .eq("id", value: categoryId.uuidString)
+                .execute()
+            
+            await loadCategories()
+            return true
+        } catch {
+            print("Failed to delete category: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to delete category"
+            }
+            return false
+        }
+    }
 }

@@ -142,12 +142,17 @@ struct BudgetWithCategory: Identifiable {
 // MARK: - Default Categories (fallback)
 extension Category {
     static let defaults: [Category] = [
-        Category(id: UUID(), name: "Food & Dining", icon: "cup.and.saucer.fill", color: "#FF6B6B", isDefault: true),
-        Category(id: UUID(), name: "Transportation", icon: "tram.fill", color: "#4ECDC4", isDefault: true),
-        Category(id: UUID(), name: "Shopping", icon: "handbag.fill", color: "#45B7D1", isDefault: true),
-        Category(id: UUID(), name: "Entertainment", icon: "gamecontroller.fill", color: "#96CEB4", isDefault: true),
-        Category(id: UUID(), name: "Bills & Utilities", icon: "creditcard.fill", color: "#FFEAA7", isDefault: true),
-        Category(id: UUID(), name: "Health", icon: "heart.fill", color: "#DDA0DD", isDefault: true),
-        Category(id: UUID(), name: "Other", icon: "square.grid.2x2.fill", color: "#636E72", isDefault: true)
+        Category(id: UUID(), name: "Food & Dining", icon: "fork.knife", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Transportation", icon: "car.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Shopping", icon: "bag.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Entertainment", icon: "tv.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Bills & Utilities", icon: "bolt.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Health & Fitness", icon: "heart.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Travel", icon: "airplane", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Subscriptions", icon: "repeat.circle.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Personal Care", icon: "sparkles", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Education", icon: "book.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Savings", icon: "banknote.fill", color: "#B9FF64", isDefault: true),
+        Category(id: UUID(), name: "Other", icon: "ellipsis.circle.fill", color: "#B9FF64", isDefault: true)
     ]
 }

@@ -97,9 +97,31 @@ final class TransactionService: ObservableObject {
                 .delete()
                 .eq("id", value: id.uuidString)
                 .execute()
+            print("✅ Transaction deleted from Supabase")
             return true
         } catch {
             print("Error deleting transaction: \(error)")
+            return false
+        }
+    }
+    
+    // MARK: - Update Transaction
+    func updateTransaction(id: UUID, amount: Double, description: String?) async -> Bool {
+        struct UpdateData: Encodable {
+            let amount: Double
+            let description: String?
+        }
+        
+        do {
+            try await client
+                .from("transactions")
+                .update(UpdateData(amount: amount, description: description))
+                .eq("id", value: id.uuidString)
+                .execute()
+            print("✅ Transaction updated in Supabase")
+            return true
+        } catch {
+            print("Error updating transaction: \(error)")
             return false
         }
     }
